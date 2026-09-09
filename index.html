@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>অ্যাডমিশন এক্সাম টাইমার | Admission Exam Tracker</title>
+  
+  <!-- Google Fonts: Hind Siliguri (Bengali) & JetBrains Mono (Numbers) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Background Ambient Aurora Meshes -->
+  <div class="aurora-ambient">
+    <div class="aurora-glow aurora-1"></div>
+    <div class="aurora-glow aurora-2"></div>
+    <div class="aurora-glow aurora-3"></div>
+  </div>
+
+  <!-- Main Application Wrapper -->
+  <div class="app-container">
+    
+    <!-- 1. Top Sticky Dynamic Notice Island -->
+    <header class="top-nav-island">
+      <div class="notice-capsule glass-card">
+        <span class="pulse-indicator"></span>
+        <span class="notice-badge">নোটিস</span>
+        <div class="notice-ticker-wrap">
+          <p id="topNoticeText" class="notice-text">সকল ইউনিটের ভর্তি পরীক্ষার সর্বশেষ সময়সূচি ও আপডেট রিয়েল-টাইমে দেখতে থাকুন।</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Header Hero Branding -->
+    <section class="hero-section">
+      <h1 class="hero-title">ভর্তি যুদ্ধ <span class="gradient-text">২০২৬-২৭</span></h1>
+      <p class="hero-subtitle">লক্ষ্য যখন পাবলিক বিশ্ববিদ্যালয়—প্রতিটি সেকেন্ড হোক তোমার সাফল্যের হাতিয়ার</p>
+    </section>
+
+    <!-- 2. Floating Category Capsule Bar -->
+    <nav class="category-wrapper">
+      <div class="category-capsule glass-card" id="categoryCapsule">
+        <button class="cat-pill active" data-category="All">All</button>
+        <button class="cat-pill" data-category="A Unit">A Unit</button>
+        <button class="cat-pill" data-category="B Unit">B Unit</button>
+        <button class="cat-pill" data-category="C Unit">C Unit</button>
+        <button class="cat-pill" data-category="Engineering">Engineering</button>
+        <button class="cat-pill" data-category="Medical">Medical</button>
+      </div>
+    </nav>
+
+    <!-- 3. Dynamic Live Cards Grid -->
+    <main class="exam-grid-container" id="examCardsGrid">
+      <!-- Cards will be populated dynamically via JavaScript -->
+    </main>
+
+  </div>
+
+  <!-- 4. Floating Minimalist Admin Trigger -->
+  <button id="adminFabBtn" class="admin-fab glass-card" title="অ্যাডমিন প্যানেল" aria-label="Admin Login">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+    </svg>
+  </button>
+
+  <!-- Admin PIN Dialog Modal -->
+  <div id="pinModal" class="modal-backdrop hidden">
+    <div class="modal-window glass-panel">
+      <div class="modal-header">
+        <h3>অ্যাডমিন ভেরিফিকেশন</h3>
+        <button class="modal-close" id="closePinModal">&times;</button>
+      </div>
+      <p class="modal-subtitle">কন্ট্রোল প্যানেলে প্রবেশ করতে ৪ ডিজিটের পিন কোড দিন (ডিফল্ট: 1234)</p>
+      <form id="pinForm" class="modal-body">
+        <div class="pin-input-group">
+          <input type="password" id="adminPinInput" maxlength="4" placeholder="••••" autocomplete="off" required>
+        </div>
+        <p id="pinErrorMessage" class="error-text hidden">ভুল পিন! আবার চেষ্টা করুন।</p>
+        <button type="submit" class="submit-action-btn">আনলক করুন</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Full Management Control Panel Modal -->
+  <div id="adminPanelModal" class="modal-backdrop hidden">
+    <div class="modal-window glass-panel admin-large-panel">
+      <div class="modal-header">
+        <div>
+          <h3>অ্যাডমিন ড্যাশবোর্ড</h3>
+          <p class="admin-tagline">পরীক্ষার সময়সূচি ও নোটিস ব্যবস্থাপনা</p>
+        </div>
+        <button class="modal-close" id="closeAdminModal">&times;</button>
+      </div>
+
+      <div class="admin-grid-content">
+        <!-- Section: Notice Update -->
+        <div class="admin-sub-card glass-sub">
+          <h4>টপ নোটিস পরিবর্তন</h4>
+          <form id="noticeUpdateForm">
+            <div class="form-group">
+              <input type="text" id="adminNoticeInput" placeholder="জরুরি নোটিস লিখুন..." required>
+            </div>
+            <button type="submit" class="btn-primary-small">নোটিস আপডেট</button>
+          </form>
+        </div>
+
+        <!-- Section: Add New Exam Form -->
+        <div class="admin-sub-card glass-sub">
+          <h4>নতুন পরীক্ষা যুক্ত করুন</h4>
+          <form id="addExamForm">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>বিশ্ববিদ্যালয়ের নাম</label>
+                <input type="text" id="examUniName" placeholder="যেমন: ঢাকা বিশ্ববিদ্যালয়" required>
+              </div>
+              <div class="form-group flex-1">
+                <label>ইউনিট / অনুষদ</label>
+                <input type="text" id="examUnitName" placeholder="যেমন: 'ক' ইউনিট (বিজ্ঞান)" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>ক্যাটাগরি</label>
+                <select id="examCategory" required>
+                  <option value="A Unit">A Unit</option>
+                  <option value="B Unit">B Unit</option>
+                  <option value="C Unit">C Unit</option>
+                  <option value="Engineering">Engineering</option>
+                  <option value="Medical">Medical</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label>স্ট্যাটাস</label>
+                <select id="examStatus" required>
+                  <option value="Confirmed">Confirmed (নিশ্চিত)</option>
+                  <option value="Tentative">Tentative (সম্ভাব্য)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>পরীক্ষার তারিখ ও সময়</label>
+                <input type="datetime-local" id="examDateTime" required>
+              </div>
+              <div class="form-group flex-1">
+                <label>আবেদনের সময়সীমা</label>
+                <input type="text" id="examApplyRange" placeholder="যেমন: ১৫ নভেম্বর - ১০ ডিসেম্বর" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>অফিসিয়াল সার্কুলার লিংক</label>
+              <input type="url" id="examCircularLink" placeholder="https://admission.eis.du.ac.bd" required>
+            </div>
+
+            <button type="submit" class="submit-action-btn">পরীক্ষা যুক্ত করুন</button>
+          </form>
+        </div>
+
+        <!-- Section: Delete/Manage Existing Exams -->
+        <div class="admin-sub-card glass-sub">
+          <h4>বিদ্যমান পরীক্ষা তালিকা ও ডিলিট</h4>
+          <div class="admin-exam-list" id="adminExamList">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Overlay -->
+  <div id="toastNotification" class="toast-capsule hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
