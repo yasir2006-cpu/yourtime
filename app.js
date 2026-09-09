@@ -1,6 +1,9 @@
 /**
- * Admission Exam Tracker & Live Countdown Engine
- * Vanilla Architecture with LocalStorage Persistence
+ * ==========================================================================
+ * Project: Admission Exam Tracker & Live Countdown Engine
+ * Developer: SAMIN YASIR
+ * Version: 2.0 (Integrated Live Edit, Admin Security & Watermark)
+ * ==========================================================================
  */
 
 (function () {
@@ -10,9 +13,19 @@
   const STORAGE_EXAMS_KEY = 'admission_exams_data_v1';
   const STORAGE_NOTICE_KEY = 'admission_notice_text_v1';
   const ADMIN_PIN_KEY = 'admission_admin_pin_v1';
-  const DEFAULT_PIN = '6732';
+  const DEFAULT_PIN = '1234';
 
-  // Seed Dummy Data (Dynamically offset so timer always starts with ticking numbers)
+  // Global State
+  let state = {
+    activeCategory: 'All',
+    exams: [],
+    notice: 'মেডিকেল ও ঢাবি ক ইউনিটের ভর্তি পরীক্ষার তারিখ প্রকাশিত হয়েছে। প্রস্তুতি জোরদার করুন!'
+  };
+
+  // Track if an exam is currently being edited (null = new exam, string = editing ID)
+  let editingExamId = null;
+
+  // Initial Seed Dummy Data (Dynamically offset so countdown always starts ticking)
   function getInitialExamsData() {
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
@@ -71,14 +84,7 @@
     ];
   }
 
-  // Application State
-  let state = {
-    activeCategory: 'All',
-    exams: [],
-    notice: 'মেডিকেল ও ঢাবি ক ইউনিটের ভর্তি পরীক্ষার তারিখ প্রকাশিত হয়েছে। প্রস্তুতি জোরদার করুন!'
-  };
-
-  // DOM Selectors Cache
+  // DOM Elements Cache
   const elements = {
     topNoticeText: document.getElementById('topNoticeText'),
     categoryCapsule: document.getElementById('categoryCapsule'),
@@ -99,13 +105,13 @@
     toastNotification: document.getElementById('toastNotification')
   };
 
-  // Convert English digits to Bengali digits
+  // Convert English Numbers to Bengali Numerals
   function toBengaliNumerals(num) {
     const bengaliDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
     return num.toString().padStart(2, '0').split('').map(d => bengaliDigits[d] || d).join('');
   }
 
-  // Calculate Difference Breakdown
+  // Calculate Remaining Time Difference
   function calculateTimeRemaining(targetIsoString) {
     const targetDate = new Date(targetIsoString).getTime();
     const now = Date.now();
@@ -123,9 +129,10 @@
     return { total: diff, days, hours, minutes, seconds, isExpired: false };
   }
 
-  // Toast Notifier
+  // Toast Notification System
   let toastTimer;
   function showToast(message) {
+    if (!elements.toastNotification) return;
     elements.toastNotification.textContent = message;
     elements.toastNotification.classList.remove('hidden');
     clearTimeout(toastTimer);
@@ -134,7 +141,67 @@
     }, 3200);
   }
 
-  // LocalStorage I/O Handlers
+  // Inject Developer Watermark (SAMIN YASIR) on Top Left Corner
+  function injectDeveloperWatermark() {
+    if (document.getElementById('saminDevBadge')) return;
+
+    const devBadge = document.createElement('aside');
+    devBadge.id = 'saminDevBadge';
+    devBadge.style.cssText = `
+      position: fixed;
+      top: 16px;
+      left: 20px;
+      z-index: 99;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 14px 6px 8px;
+      background: rgba(18, 24, 38, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 100px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: default;
+      user-select: none;
+    `;
+
+    devBadge.innerHTML = `
+      <div style="
+        width: 28px;
+        height: 28px;
+        background: linear-gradient(135deg, #06b6d4, #6366f1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: monospace;
+        font-size: 0.75rem;
+        font-weight: 800;
+        color: #ffffff;
+        box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+      ">SY</div>
+      <div style="display: flex; flex-direction: column; line-height: 1.15;">
+        <span style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-family: monospace;">Developer</span>
+        <span style="font-size: 0.88rem; font-weight: 700; color: #ffffff; letter-spacing: 0.4px;">SAMIN YASIR</span>
+      </div>
+    `;
+
+    devBadge.addEventListener('mouseenter', () => {
+      devBadge.style.transform = 'translateY(-2px)';
+      devBadge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+    });
+
+    devBadge.addEventListener('mouseleave', () => {
+      devBadge.style.transform = 'translateY(0)';
+      devBadge.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+    });
+
+    document.body.appendChild(devBadge);
+  }
+
+  // LocalStorage I/O Operations
   function loadData() {
     const savedExams = localStorage.getItem(STORAGE_EXAMS_KEY);
     const savedNotice = localStorage.getItem(STORAGE_NOTICE_KEY);
@@ -160,26 +227,25 @@
     localStorage.setItem(STORAGE_NOTICE_KEY, newNotice);
   }
 
-  // View Renderers
+  // Render Top Notice
   function renderNotice() {
-    elements.topNoticeText.textContent = state.notice;
-    elements.adminNoticeInput.value = state.notice;
+    if (elements.topNoticeText) elements.topNoticeText.textContent = state.notice;
+    if (elements.adminNoticeInput) elements.adminNoticeInput.value = state.notice;
   }
 
+  // Filter and Smart Sort Logic
   function getSortedAndFilteredExams() {
-    // 1. Filter by category
     let list = state.exams.filter(exam => {
       if (state.activeCategory === 'All') return true;
       return exam.category === state.activeCategory;
     });
 
-    // 2. Smart Sort: Closest upcoming exam first
     const now = Date.now();
     list.sort((a, b) => {
       const diffA = new Date(a.examDateTime).getTime() - now;
       const diffB = new Date(b.examDateTime).getTime() - now;
 
-      // Put expired exams at the very bottom
+      // Push expired exams to the bottom
       if (diffA < 0 && diffB >= 0) return 1;
       if (diffB < 0 && diffA >= 0) return -1;
       return diffA - diffB;
@@ -188,7 +254,9 @@
     return list;
   }
 
+  // Render Main Cards
   function renderExams() {
+    if (!elements.examCardsGrid) return;
     const filteredList = getSortedAndFilteredExams();
     elements.examCardsGrid.innerHTML = '';
 
@@ -263,7 +331,7 @@
     updateTimerDisplay();
   }
 
-  // Live Timer Tick Loop
+  // Live Timer Count Tick
   function updateTimerDisplay() {
     const timerBoxes = document.querySelectorAll('.timer-container');
     timerBoxes.forEach(box => {
@@ -274,6 +342,8 @@
       const hoursElem = box.querySelector('[data-unit="hours"]');
       const minsElem = box.querySelector('[data-unit="minutes"]');
       const secsElem = box.querySelector('[data-unit="seconds"]');
+
+      if (!daysElem) return;
 
       if (time.isExpired) {
         daysElem.textContent = '০০';
@@ -289,9 +359,11 @@
     });
   }
 
-  // Admin Exam Management List
+  // Admin Exam List (Includes Both Edit ✎ and Delete ✕ Handlers)
   function renderAdminExamList() {
+    if (!elements.adminExamList) return;
     elements.adminExamList.innerHTML = '';
+
     if (state.exams.length === 0) {
       elements.adminExamList.innerHTML = '<p style="color: var(--text-dim); font-size: 0.85rem;">কোনো পরীক্ষা সংরক্ষিত নেই।</p>';
       return;
@@ -300,21 +372,88 @@
     state.exams.forEach(exam => {
       const item = document.createElement('div');
       item.className = 'admin-list-item';
+      item.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; margin-bottom: 8px;';
+      
       item.innerHTML = `
-        <div class="item-info">
-          <strong>${exam.uniName} (${exam.unitName})</strong>
-          <span>${exam.category} | ${new Date(exam.examDateTime).toLocaleDateString('bn-BD')}</span>
+        <div class="item-info" style="display: flex; flex-direction: column;">
+          <strong style="font-size: 0.95rem; color: #fff;">${exam.uniName} (${exam.unitName})</strong>
+          <span style="font-size: 0.8rem; color: #94a3b8;">${exam.category} | ${new Date(exam.examDateTime).toLocaleDateString('bn-BD')}</span>
         </div>
-        <button class="delete-btn" data-id="${exam.id}">ডিলিট</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="edit-btn-action" data-id="${exam.id}" style="
+            background: rgba(14, 165, 233, 0.15);
+            color: #38bdf8;
+            border: 1px solid rgba(14, 165, 233, 0.35);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">এডিট ✎</button>
+          
+          <button class="delete-btn-action" data-id="${exam.id}" style="
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">ডিলিট ✕</button>
+        </div>
       `;
       elements.adminExamList.appendChild(item);
     });
 
-    // Delete Event Binding
-    elements.adminExamList.querySelectorAll('.delete-btn').forEach(btn => {
+    // 1. Edit Button Click Handler
+    elements.adminExamList.querySelectorAll('.edit-btn-action').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const idToDelete = e.target.getAttribute('data-id');
+        const idToEdit = e.currentTarget.getAttribute('data-id');
+        const targetExam = state.exams.find(item => item.id === idToEdit);
+        if (!targetExam) return;
+
+        editingExamId = targetExam.id;
+
+        // Populate Form with existing data
+        document.getElementById('examUniName').value = targetExam.uniName;
+        document.getElementById('examUnitName').value = targetExam.unitName;
+        document.getElementById('examCategory').value = targetExam.category;
+        document.getElementById('examStatus').value = targetExam.status;
+
+        // Convert UTC/ISO to local format for <input type="datetime-local">
+        const dt = new Date(targetExam.examDateTime);
+        dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+        document.getElementById('examDateTime').value = dt.toISOString().slice(0, 16);
+
+        document.getElementById('examApplyRange').value = targetExam.applyRange;
+        document.getElementById('examCircularLink').value = targetExam.circularUrl;
+
+        // Highlight Submit Button for Edit Mode
+        const submitBtn = elements.addExamForm.querySelector('button[type="submit"]');
+        submitBtn.textContent = 'আপডেট সংরক্ষণ করুন ✓';
+        submitBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+
+        elements.addExamForm.scrollIntoView({ behavior: 'smooth' });
+        showToast('তথ্যগুলো ফর্মে আনা হয়েছে, পরিবর্তন করে সেভ করুন।');
+      });
+    });
+
+    // 2. Delete Button Click Handler
+    elements.adminExamList.querySelectorAll('.delete-btn-action').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idToDelete = e.currentTarget.getAttribute('data-id');
         state.exams = state.exams.filter(item => item.id !== idToDelete);
+
+        // If currently editing item is deleted, reset the form
+        if (editingExamId === idToDelete) {
+          elements.addExamForm.reset();
+          editingExamId = null;
+          const submitBtn = elements.addExamForm.querySelector('button[type="submit"]');
+          submitBtn.textContent = 'পরীক্ষা যুক্ত করুন';
+          submitBtn.style.background = '';
+        }
+
         saveExams();
         renderAdminExamList();
         renderExams();
@@ -323,88 +462,148 @@
     });
   }
 
-  // Category Filter Click Handler
-  elements.categoryCapsule.addEventListener('click', (e) => {
-    if (!e.target.classList.contains('cat-pill')) return;
-    elements.categoryPills.forEach(pill => pill.classList.remove('active'));
-    e.target.classList.add('active');
-    state.activeCategory = e.target.getAttribute('data-category');
-    renderExams();
-  });
+  // Category Capsule Filter Selection
+  if (elements.categoryCapsule) {
+    elements.categoryCapsule.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('cat-pill')) return;
+      elements.categoryPills.forEach(pill => pill.classList.remove('active'));
+      e.target.classList.add('active');
+      state.activeCategory = e.target.getAttribute('data-category');
+      renderExams();
+    });
+  }
 
-  // Admin Security Logic
-  elements.adminFabBtn.addEventListener('click', () => {
-    elements.pinErrorMessage.classList.add('hidden');
-    elements.adminPinInput.value = '';
-    elements.pinModal.classList.remove('hidden');
-    elements.adminPinInput.focus();
-  });
+  // Admin FAB Trigger Click
+  if (elements.adminFabBtn) {
+    elements.adminFabBtn.addEventListener('click', () => {
+      elements.pinErrorMessage.classList.add('hidden');
+      elements.adminPinInput.value = '';
+      elements.pinModal.classList.remove('hidden');
+      elements.adminPinInput.focus();
+    });
+  }
 
-  elements.closePinModal.addEventListener('click', () => {
-    elements.pinModal.classList.add('hidden');
-  });
-
-  elements.pinForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const enteredPin = elements.adminPinInput.value.trim();
-    const storedPin = localStorage.getItem(ADMIN_PIN_KEY) || DEFAULT_PIN;
-
-    if (enteredPin === storedPin) {
+  // Close Modals
+  if (elements.closePinModal) {
+    elements.closePinModal.addEventListener('click', () => {
       elements.pinModal.classList.add('hidden');
-      elements.adminPanelModal.classList.remove('hidden');
+    });
+  }
+
+  if (elements.closeAdminModal) {
+    elements.closeAdminModal.addEventListener('click', () => {
+      elements.adminPanelModal.classList.add('hidden');
+    });
+  }
+
+  // PIN Verification Handler
+  if (elements.pinForm) {
+    elements.pinForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const enteredPin = elements.adminPinInput.value.trim();
+      const storedPin = localStorage.getItem(ADMIN_PIN_KEY) || DEFAULT_PIN;
+
+      if (enteredPin === storedPin) {
+        elements.pinModal.classList.add('hidden');
+        elements.adminPanelModal.classList.remove('hidden');
+        renderAdminExamList();
+        renderNotice();
+      } else {
+        elements.pinErrorMessage.classList.remove('hidden');
+        elements.adminPinInput.select();
+      }
+    });
+  }
+
+  // Notice Update Submission
+  if (elements.noticeUpdateForm) {
+    elements.noticeUpdateForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const updatedNotice = elements.adminNoticeInput.value.trim();
+      if (updatedNotice) {
+        saveNotice(updatedNotice);
+        renderNotice();
+        showToast('টপ নোটিস সফলভাবে হালনাগাদ হয়েছে!');
+      }
+    });
+  }
+
+  // Unified Add / Edit Exam Submission
+  if (elements.addExamForm) {
+    elements.addExamForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      const examData = {
+        uniName: document.getElementById('examUniName').value.trim(),
+        unitName: document.getElementById('examUnitName').value.trim(),
+        category: document.getElementById('examCategory').value,
+        status: document.getElementById('examStatus').value,
+        examDateTime: new Date(document.getElementById('examDateTime').value).toISOString(),
+        applyRange: document.getElementById('examApplyRange').value.trim(),
+        circularUrl: document.getElementById('examCircularLink').value.trim()
+      };
+
+      if (editingExamId) {
+        // Update Existing Exam Record
+        const index = state.exams.findIndex(item => item.id === editingExamId);
+        if (index !== -1) {
+          state.exams[index] = { ...state.exams[index], ...examData };
+          showToast('পরীক্ষার তথ্য সফলভাবে আপডেট হয়েছে!');
+        }
+        editingExamId = null;
+      } else {
+        // Add New Exam Record
+        state.exams.push({
+          id: 'exam_' + Date.now(),
+          ...examData
+        });
+        showToast('নতুন পরীক্ষার তথ্য যুক্ত করা হয়েছে!');
+      }
+
+      // Reset Form and Restore Submit Button state
+      elements.addExamForm.reset();
+      const submitBtn = elements.addExamForm.querySelector('button[type="submit"]');
+      submitBtn.textContent = 'পরীক্ষা যুক্ত করুন';
+      submitBtn.style.background = '';
+
+      saveExams();
+      renderExams();
       renderAdminExamList();
-      renderNotice();
-    } else {
-      elements.pinErrorMessage.classList.remove('hidden');
-      elements.adminPinInput.select();
-    }
-  });
+    });
+  }
 
-  elements.closeAdminModal.addEventListener('click', () => {
-    elements.adminPanelModal.classList.add('hidden');
-  });
+  // Admin PIN Change Handler (If element exists in HTML)
+  const changePinForm = document.getElementById('changePinForm');
+  if (changePinForm) {
+    changePinForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const currentPin = document.getElementById('currentPinInput').value.trim();
+      const newPin = document.getElementById('newPinInput').value.trim();
+      const storedPin = localStorage.getItem(ADMIN_PIN_KEY) || DEFAULT_PIN;
 
-  // Admin: Update Notice Handler
-  elements.noticeUpdateForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const updatedNotice = elements.adminNoticeInput.value.trim();
-    if (updatedNotice) {
-      saveNotice(updatedNotice);
-      renderNotice();
-      showToast('টপ নোটিস সফলভাবে হালনাগাদ হয়েছে!');
-    }
-  });
+      if (currentPin !== storedPin) {
+        showToast('বর্তমান পিনটি সঠিক নয়!');
+        return;
+      }
+      if (newPin.length !== 4 || isNaN(newPin)) {
+        showToast('নতুন পিন অবশ্যই ৪ ডিজিটের সংখ্যা হতে হবে!');
+        return;
+      }
 
-  // Admin: Add New Exam Handler
-  elements.addExamForm.addEventListener('submit', (e) => {
-    e.preventDefault();
+      localStorage.setItem(ADMIN_PIN_KEY, newPin);
+      changePinForm.reset();
+      showToast('অ্যাডমিন পিন সফলভাবে পরিবর্তন হয়েছে!');
+    });
+  }
 
-    const newExam = {
-      id: 'exam_' + Date.now(),
-      uniName: document.getElementById('examUniName').value.trim(),
-      unitName: document.getElementById('examUnitName').value.trim(),
-      category: document.getElementById('examCategory').value,
-      status: document.getElementById('examStatus').value,
-      examDateTime: new Date(document.getElementById('examDateTime').value).toISOString(),
-      applyRange: document.getElementById('examApplyRange').value.trim(),
-      circularUrl: document.getElementById('examCircularLink').value.trim()
-    };
-
-    state.exams.push(newExam);
-    saveExams();
-    renderExams();
-    renderAdminExamList();
-    elements.addExamForm.reset();
-    showToast('নতুন পরীক্ষার তথ্য যুক্ত করা হয়েছে!');
-  });
-
-  // Global Initializer
+  // App Initialization
   function init() {
     loadData();
+    injectDeveloperWatermark();
     renderNotice();
     renderExams();
 
-    // Start 1-second interval loop for countdown precision
+    // 1-second interval loop for countdown precision
     setInterval(updateTimerDisplay, 1000);
   }
 
@@ -414,53 +613,5 @@
   } else {
     init();
   }
-// ==========================================
-// Developer Watermark Badge (SAMIN YASIR)
-// ==========================================
-(function injectDeveloperBadge() {
-  const badge = document.createElement('div');
-  badge.innerHTML = `
-    <div style="
-      position: fixed;
-      top: 18px;
-      left: 20px;
-      z-index: 99;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 6px 14px 6px 8px;
-      background: rgba(18, 24, 38, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 100px;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-      cursor: default;
-      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    " onmouseover="this.style.transform='translateY(-2px)'; this.style.borderColor='rgba(56, 189, 248, 0.4)';" 
-       onmouseout="this.style.transform='translateY(0)'; this.style.borderColor='rgba(255, 255, 255, 0.12)';">
-       
-      <div style="
-        width: 28px;
-        height: 28px;
-        background: linear-gradient(135deg, #06b6d4, #6366f1);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.75rem;
-        font-weight: 800;
-        color: #fff;
-        box-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
-      ">SY</div>
 
-      <div style="display: flex; flex-direction: column; line-height: 1.15;">
-        <span style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-family: monospace;">Developer</span>
-        <span style="font-size: 0.88rem; font-weight: 700; color: #ffffff; letter-spacing: 0.4px;">SAMIN YASIR</span>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(badge);
-})();
 })();
